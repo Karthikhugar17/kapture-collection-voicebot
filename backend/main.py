@@ -9,12 +9,241 @@ import json
 import os
 import uuid
 import secrets
+import mysql.connector
+from mysql.connector import Error
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 VAPI_WEBHOOK_SECRET = os.getenv("VAPI_WEBHOOK_SECRET")
+
+# ============================================================
+# MYSQL DATABASE CONNECTION
+# ============================================================
+
+def get_db_connection():
+    try:
+        connection = mysql.connector.connect(
+            host=os.getenv("MYSQL_HOST"),
+            port=int(os.getenv("MYSQL_PORT", 3306)),
+            user=os.getenv("MYSQL_USER"),
+            password=os.getenv("MYSQL_PASSWORD"),
+            database=os.getenv("MYSQL_DATABASE")
+        )
+
+        return connection
+
+    except Error as error:
+        print(f"[DATABASE ERROR] {error}")
+        return None
+    
+
+def get_customer_id(account_id: str):
+    connection = get_db_connection()
+
+    if connection is None:
+        return None
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT id
+            FROM customers
+            WHERE account_id = %s
+            """,
+            (account_id,)
+        )
+
+        row = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        return row[0] if row else None
+
+    except Error as error:
+
+        print(f"[DATABASE ERROR] Customer ID lookup failed: {error}")
+
+        if connection.is_connected():
+            connection.close()
+
+        return None
+
+def update_verification_status(
+    call_id: str,
+    verified: bool
+):
+    connection = get_db_connection()
+
+    if connection is None:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE collection_calls
+            SET verification_status = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE call_id = %s
+            """,
+            (verified, call_id)
+        )
+
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return True
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] Verification update failed: {error}"
+        )
+
+        if connection.is_connected():
+            connection.rollback()
+            connection.close()
+
+        return False
+    
+def update_ptp_record(
+    call_id: str,
+    amount: float,
+    ptp_date: str
+):
+    connection = get_db_connection()
+
+    if connection is None:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE collection_calls
+            SET ptp_amount = %s,
+                ptp_date = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE call_id = %s
+            """,
+            (amount, ptp_date, call_id)
+        )
+
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return True
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] PTP update failed: {error}"
+        )
+
+        if connection.is_connected():
+            connection.rollback()
+            connection.close()
+
+        return False
+
+def update_disposition_record(
+    call_id: str,
+    status: str,
+    notes: str
+):
+    connection = get_db_connection()
+
+    if connection is None:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            UPDATE collection_calls
+            SET disposition = %s,
+                notes = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE call_id = %s
+            """,
+            (status, notes, call_id)
+        )
+
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return True
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] Disposition update failed: {error}"
+        )
+
+        if connection.is_connected():
+            connection.rollback()
+            connection.close()
+
+        return False
+
+def create_call_record(
+    call_id: str,
+    customer_id: int
+):
+    connection = get_db_connection()
+
+    if connection is None:
+        return False
+
+    try:
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO collection_calls (
+                call_id,
+                customer_id
+            )
+            VALUES (%s, %s)
+            ON DUPLICATE KEY UPDATE
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (call_id, customer_id)
+        )
+
+        connection.commit()
+
+        cursor.close()
+        connection.close()
+
+        return True
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] Call record creation failed: {error}"
+        )
+
+        if connection.is_connected():
+            connection.rollback()
+            connection.close()
+
+        return False
+
 # ============================================================
 # FASTAPI APPLICATION
 # ============================================================
@@ -130,7 +359,56 @@ def verify_customer(
 
     state = get_call_state(call_id)
 
-    customer = CUSTOMERS["ACC-88392"]
+    connection = get_db_connection()
+
+    if connection is None:
+        return {
+            "verified": False,
+            "reason": "Customer database is unavailable."
+        }
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                account_id,
+                customer_name,
+                verification_code,
+                loan_type,
+                overdue_amount,
+                days_past_due,
+                phone
+            FROM customers
+            WHERE account_id = %s
+            """,
+            ("ACC-88392",)
+        )
+
+        customer = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+    except Error as error:
+
+        print(f"[DATABASE ERROR] Customer lookup failed: {error}")
+
+        if connection.is_connected():
+            connection.close()
+
+        return {
+            "verified": False,
+            "reason": "Unable to access customer information."
+        }
+
+    if customer is None:
+
+        return {
+            "verified": False,
+            "reason": "Customer account was not found."
+        }
 
     # --------------------------------------------------------
     # Do not allow verification after call has ended
@@ -189,6 +467,22 @@ def verify_customer(
         state["authenticated"] = True
         state["state"] = "AUTHENTICATED"
 
+        customer_id = get_customer_id(
+            customer["account_id"]
+        )
+
+        if customer_id is not None:
+
+            create_call_record(
+                call_id=call_id,
+                customer_id=customer_id
+            )
+
+            update_verification_status(
+                call_id=call_id,
+                verified=True
+            )
+
         return {
             "verified": True,
             "customer_name": customer["customer_name"],
@@ -200,6 +494,22 @@ def verify_customer(
     # --------------------------------------------------------
 
     state["authenticated"] = False
+
+    customer_id = get_customer_id(
+        customer["account_id"]
+    )
+
+    if customer_id is not None:
+
+        create_call_record(
+            call_id=call_id,
+            customer_id=customer_id
+        )
+
+        update_verification_status(
+            call_id=call_id,
+            verified=False
+        )
 
     return {
         "verified": False,
@@ -231,7 +541,53 @@ def get_account_details(
             )
         }
 
-    customer = CUSTOMERS["ACC-88392"]
+    connection = get_db_connection()
+
+    if connection is None:
+        return {
+            "allowed": False,
+            "reason": "Customer database is unavailable."
+        }
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                customer_name,
+                loan_type,
+                overdue_amount,
+                days_past_due
+            FROM customers
+            WHERE account_id = %s
+            """,
+            ("ACC-88392",)
+        )
+
+        customer = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+    except Error as error:
+
+        print(f"[DATABASE ERROR] Account lookup failed: {error}")
+
+        if connection.is_connected():
+            connection.close()
+
+        return {
+            "allowed": False,
+            "reason": "Unable to retrieve account information."
+        }
+
+    if customer is None:
+
+        return {
+            "allowed": False,
+            "reason": "Customer account was not found."
+        }
 
     state["state"] = "NEGOTIATION"
 
@@ -239,7 +595,7 @@ def get_account_details(
         "allowed": True,
         "customer_name": customer["customer_name"],
         "loan_type": customer["loan_type"],
-        "overdue_amount": customer["overdue_amount"],
+        "overdue_amount": float(customer["overdue_amount"]),
         "days_past_due": customer["days_past_due"]
     }
 
@@ -386,6 +742,19 @@ def log_promise_to_pay(
         "ptp_id": ptp_id
     }
 
+    database_updated = update_ptp_record(
+        call_id=call_id,
+        amount=amount,
+        ptp_date=ptp_date
+    )
+
+    if not database_updated:
+
+        print(
+            "[DATABASE WARNING] "
+            "PTP could not be persisted to MySQL."
+        )
+
     state["state"] = "RESOLUTION"
 
     return {
@@ -496,13 +865,28 @@ def mark_disposition(
     # Save disposition
     # --------------------------------------------------------
 
+    notes = str(notes or "")
+
     state["disposition"] = {
         "status": status,
-        "notes": str(notes or ""),
+        "notes": notes,
         "timestamp": datetime.now(
             timezone.utc
         ).isoformat()
     }
+
+    database_updated = update_disposition_record(
+        call_id=call_id,
+        status=status,
+        notes=notes
+    )
+
+    if not database_updated:
+
+        print(
+            "[DATABASE WARNING] "
+            "Disposition could not be persisted to MySQL."
+        )
 
     state["state"] = "CALL_ENDED"
 
@@ -1160,3 +1544,52 @@ def debug_call_state(call_id: str):
         "exists": True,
         "state": state
     }
+
+# ============================================================
+# DATABASE HEALTH CHECK
+# ============================================================
+
+@app.get("/health/db")
+def database_health_check():
+
+    connection = get_db_connection()
+
+    if connection is None:
+        return {
+            "database": "kapture_finance",
+            "status": "disconnected"
+        }
+
+    try:
+
+        cursor = connection.cursor()
+
+        cursor.execute("SELECT 1")
+
+        result = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        if result == (1,):
+
+            return {
+                "database": "kapture_finance",
+                "status": "connected"
+            }
+
+        return {
+            "database": "kapture_finance",
+            "status": "error"
+        }
+
+    except Error as error:
+
+        if connection.is_connected():
+            connection.close()
+
+        return {
+            "database": "kapture_finance",
+            "status": "error",
+            "message": str(error)
+        }
