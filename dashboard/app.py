@@ -2,6 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
 API_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(
@@ -10,12 +15,28 @@ st.set_page_config(
     layout="wide"
 )
 
+
+# ============================================================
+# HEADER
+# ============================================================
+
 st.title("Kapture Finance Collection Dashboard")
 st.caption("AI Voice Collection & Recovery Analytics")
 
+
+# ============================================================
+# FETCH DATA FROM FASTAPI
+# ============================================================
+
 try:
+
     analytics_response = requests.get(
         f"{API_URL}/analytics",
+        timeout=5
+    )
+
+    customers_response = requests.get(
+        f"{API_URL}/customers",
         timeout=5
     )
 
@@ -35,39 +56,30 @@ try:
     )
 
     analytics_response.raise_for_status()
+    customers_response.raise_for_status()
     calls_response.raise_for_status()
     followups_response.raise_for_status()
     due_followups_response.raise_for_status()
 
     analytics = analytics_response.json()
+    customers_data = customers_response.json()
     calls_data = calls_response.json()
     followups_data = followups_response.json()
     due_followups_data = due_followups_response.json()
 
 except requests.RequestException:
+
     st.error(
         "Unable to connect to the FastAPI backend. "
         "Make sure the backend is running on port 8000."
     )
-    st.stop()
 
-    analytics_response.raise_for_status()
-    calls_response.raise_for_status()
-
-    analytics = analytics_response.json()
-    calls_data = calls_response.json()
-
-except requests.RequestException:
-    st.error(
-        "Unable to connect to the FastAPI backend. "
-        "Make sure the backend is running on port 8000."
-    )
     st.stop()
 
 
-# -------------------------
+# ============================================================
 # KPI CARDS
-# -------------------------
+# ============================================================
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -92,12 +104,11 @@ col4.metric(
 )
 
 
-st.divider()
-
-
-# -------------------------
+# ============================================================
 # COLLECTION SUMMARY
-# -------------------------
+# ============================================================
+
+st.divider()
 
 col1, col2 = st.columns(2)
 
@@ -140,12 +151,11 @@ with col2:
     st.bar_chart(chart_data)
 
 
+# ============================================================
+# COLLECTION CALL HISTORY
+# ============================================================
+
 st.divider()
-
-
-# -------------------------
-# RECENT CALLS
-# -------------------------
 
 st.subheader("Collection Call History")
 
@@ -181,9 +191,10 @@ else:
 
     st.info("No collection calls found.")
 
-# -------------------------
+
+# ============================================================
 # CALL DETAILS
-# -------------------------
+# ============================================================
 
 st.divider()
 
@@ -192,7 +203,9 @@ st.subheader("Call Details")
 if calls:
 
     call_options = {
-        f"{call['customer_name']} | {call['disposition']} | {call['call_id'][:8]}...":
+        f"{call['customer_name']} | "
+        f"{call['disposition']} | "
+        f"{call['call_id'][:8]}...":
         call["call_id"]
         for call in calls
     }
@@ -218,6 +231,7 @@ if calls:
         col1, col2, col3 = st.columns(3)
 
         with col1:
+
             st.write("**Customer**")
             st.write(call_detail["customer_name"])
 
@@ -228,7 +242,9 @@ if calls:
             st.write(call_detail["loan_type"])
 
         with col2:
+
             st.write("**Overdue Amount**")
+
             st.write(
                 f"₹{call_detail['overdue_amount']:,.2f}"
             )
@@ -240,15 +256,23 @@ if calls:
             st.write(call_detail["disposition"])
 
         with col3:
+
             st.write("**PTP Amount**")
+
             ptp_amount = call_detail["ptp_amount"]
 
             if ptp_amount is not None:
-                st.write(f"₹{ptp_amount:,.2f}")
+
+                st.write(
+                    f"₹{ptp_amount:,.2f}"
+                )
+
             else:
+
                 st.write("N/A")
 
             st.write("**PTP Date**")
+
             st.write(
                 call_detail["ptp_date"]
                 if call_detail["ptp_date"]
@@ -256,6 +280,7 @@ if calls:
             )
 
             st.write("**Verification**")
+
             st.write(
                 "Verified"
                 if call_detail["verification_status"]
@@ -263,7 +288,11 @@ if calls:
             )
 
         st.write("**Call Notes**")
-        st.info(call_detail["notes"] or "No notes available.")
+
+        st.info(
+            call_detail["notes"]
+            or "No notes available."
+        )
 
     except requests.RequestException:
 
@@ -271,36 +300,65 @@ if calls:
             "Unable to retrieve call details from the backend."
         )
 
-# -------------------------
+
+# ============================================================
 # FOLLOW-UP MANAGEMENT
-# -------------------------
+# ============================================================
 
 st.divider()
 
 st.subheader("Follow-up Management")
 
-due_followups = due_followups_data.get("followups", [])
-pending_followups = followups_data.get("followups", [])
+due_followups = due_followups_data.get(
+    "followups",
+    []
+)
+
+pending_followups = followups_data.get(
+    "followups",
+    [])
+
+
+# -------------------------
+# FOLLOW-UP COUNTERS
+# -------------------------
 
 col1, col2 = st.columns(2)
 
 with col1:
+
     st.metric(
         "Due Follow-ups",
-        due_followups_data.get("total_due", 0)
+        due_followups_data.get(
+            "total_due",
+            0
+        )
     )
 
 with col2:
+
     st.metric(
         "Pending Follow-ups",
-        followups_data.get("total_followups", 0)
+        followups_data.get(
+            "total_followups",
+            0
+        )
     )
+
+
+# -------------------------
+# DUE FOLLOW-UPS
+# -------------------------
 
 if due_followups:
 
-    st.warning("Follow-ups requiring attention today")
+    st.warning(
+        "Follow-ups requiring attention today"
+    )
 
-    due_df = pd.DataFrame(due_followups)
+    due_df = pd.DataFrame(
+        due_followups
+    )
 
     due_columns = [
         "customer_name",
@@ -325,11 +383,14 @@ if due_followups:
 
 else:
 
-    st.success("No follow-ups are due today.")
+    st.success(
+        "No follow-ups are due today."
+    )
 
-# -------------------------
+
+# ============================================================
 # PENDING FOLLOW-UP ACTIONS
-# -------------------------
+# ============================================================
 
 st.subheader("Pending Follow-ups")
 
@@ -338,10 +399,18 @@ if pending_followups:
     for followup in pending_followups:
 
         customer_name = followup["customer_name"]
+
         call_id = followup["call_id"]
+
         amount = followup["ptp_amount"]
-        follow_up_date = followup["follow_up_date"]
-        attempts = followup["attempt_count"]
+
+        follow_up_date = followup[
+            "follow_up_date"
+        ]
+
+        attempts = followup[
+            "attempt_count"
+        ]
 
         st.write(
             f"**{customer_name}** | "
@@ -351,6 +420,10 @@ if pending_followups:
         )
 
         col1, col2 = st.columns(2)
+
+        # -------------------------
+        # COMPLETE
+        # -------------------------
 
         with col1:
 
@@ -383,6 +456,10 @@ if pending_followups:
                     st.error(
                         "Failed to update follow-up."
                     )
+
+        # -------------------------
+        # MARK FAILED
+        # -------------------------
 
         with col2:
 
@@ -420,4 +497,130 @@ if pending_followups:
 
 else:
 
-    st.info("No pending follow-ups.")
+    st.info(
+        "No pending follow-ups."
+    )
+
+
+# ============================================================
+# CUSTOMER PORTFOLIO
+# ============================================================
+
+st.divider()
+
+st.subheader("Customer Portfolio")
+
+customers = customers_data.get(
+    "customers",
+    []
+)
+
+if customers:
+
+    customers_df = pd.DataFrame(
+        customers
+    )
+
+    # -------------------------
+    # PORTFOLIO METRICS
+    # -------------------------
+
+    total_customers = len(customers_df)
+
+    total_overdue = customers_df[
+        "overdue_amount"
+    ].sum()
+
+    high_risk_customers = len(
+        customers_df[
+            customers_df["risk_level"] == "HIGH"
+        ]
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        st.metric(
+            "Total Customers",
+            total_customers
+        )
+
+    with col2:
+
+        st.metric(
+            "Total Overdue Amount",
+            f"₹{total_overdue:,.2f}"
+        )
+
+    with col3:
+
+        st.metric(
+            "High Risk Customers",
+            high_risk_customers
+        )
+
+    st.write("")
+
+    # -------------------------
+    # RISK DISTRIBUTION
+    # -------------------------
+
+    st.subheader("Risk Distribution")
+
+    risk_counts = (
+        customers_df["risk_level"]
+        .value_counts()
+        .reindex(
+            ["HIGH", "MEDIUM", "LOW"],
+            fill_value=0
+        )
+    )
+
+    risk_chart = pd.DataFrame({
+        "Customers": risk_counts
+    })
+
+    st.bar_chart(risk_chart)
+
+    # -------------------------
+    # CUSTOMER TABLE
+    # -------------------------
+
+    st.subheader("Customer Details")
+
+    portfolio_columns = [
+        "customer_name",
+        "account_id",
+        "loan_type",
+        "overdue_amount",
+        "days_past_due",
+        "risk_level"
+    ]
+
+    available_columns = [
+        column
+        for column in portfolio_columns
+        if column in customers_df.columns
+    ]
+
+    st.dataframe(
+        customers_df[available_columns],
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No customers found."
+    )
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.caption(
+    "Data source: FastAPI REST API → MySQL"
+)

@@ -2052,4 +2052,70 @@ def update_followup(
             status_code=500,
             detail="Failed to update follow-up."
         )
+
+@app.get("/customers")
+def get_customers():
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                account_id,
+                customer_name,
+                loan_type,
+                overdue_amount,
+                days_past_due,
+                phone,
+                created_at,
+
+                CASE
+                    WHEN days_past_due >= 25 THEN 'HIGH'
+                    WHEN days_past_due >= 15 THEN 'MEDIUM'
+                    ELSE 'LOW'
+                END AS risk_level
+
+            FROM customers
+            ORDER BY days_past_due DESC
+            """
+        )
+
+        customers = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        for customer in customers:
+            customer["overdue_amount"] = float(
+                customer["overdue_amount"]
+            )
+
+        return {
+            "total_customers": len(customers),
+            "customers": customers
+        }
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve customers: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve customers."
+        )
         
