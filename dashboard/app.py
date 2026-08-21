@@ -24,6 +24,33 @@ try:
         timeout=5
     )
 
+    followups_response = requests.get(
+        f"{API_URL}/followups",
+        timeout=5
+    )
+
+    due_followups_response = requests.get(
+        f"{API_URL}/followups/due",
+        timeout=5
+    )
+
+    analytics_response.raise_for_status()
+    calls_response.raise_for_status()
+    followups_response.raise_for_status()
+    due_followups_response.raise_for_status()
+
+    analytics = analytics_response.json()
+    calls_data = calls_response.json()
+    followups_data = followups_response.json()
+    due_followups_data = due_followups_response.json()
+
+except requests.RequestException:
+    st.error(
+        "Unable to connect to the FastAPI backend. "
+        "Make sure the backend is running on port 8000."
+    )
+    st.stop()
+
     analytics_response.raise_for_status()
     calls_response.raise_for_status()
 
@@ -244,6 +271,153 @@ if calls:
             "Unable to retrieve call details from the backend."
         )
 
-st.caption(
-    "Data source: FastAPI REST API → MySQL"
-)
+# -------------------------
+# FOLLOW-UP MANAGEMENT
+# -------------------------
+
+st.divider()
+
+st.subheader("Follow-up Management")
+
+due_followups = due_followups_data.get("followups", [])
+pending_followups = followups_data.get("followups", [])
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric(
+        "Due Follow-ups",
+        due_followups_data.get("total_due", 0)
+    )
+
+with col2:
+    st.metric(
+        "Pending Follow-ups",
+        followups_data.get("total_followups", 0)
+    )
+
+if due_followups:
+
+    st.warning("Follow-ups requiring attention today")
+
+    due_df = pd.DataFrame(due_followups)
+
+    due_columns = [
+        "customer_name",
+        "account_id",
+        "ptp_amount",
+        "ptp_date",
+        "follow_up_date",
+        "attempt_count"
+    ]
+
+    available_columns = [
+        column
+        for column in due_columns
+        if column in due_df.columns
+    ]
+
+    st.dataframe(
+        due_df[available_columns],
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.success("No follow-ups are due today.")
+
+# -------------------------
+# PENDING FOLLOW-UP ACTIONS
+# -------------------------
+
+st.subheader("Pending Follow-ups")
+
+if pending_followups:
+
+    for followup in pending_followups:
+
+        customer_name = followup["customer_name"]
+        call_id = followup["call_id"]
+        amount = followup["ptp_amount"]
+        follow_up_date = followup["follow_up_date"]
+        attempts = followup["attempt_count"]
+
+        st.write(
+            f"**{customer_name}** | "
+            f"₹{amount:,.2f} | "
+            f"Follow-up: {follow_up_date} | "
+            f"Attempts: {attempts}"
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+
+            if st.button(
+                "Complete",
+                key=f"complete_{call_id}"
+            ):
+
+                try:
+
+                    response = requests.put(
+                        f"{API_URL}/followups/{call_id}",
+                        params={
+                            "status": "COMPLETED",
+                            "increment_attempt": True
+                        },
+                        timeout=5
+                    )
+
+                    response.raise_for_status()
+
+                    st.success(
+                        "Follow-up marked as completed."
+                    )
+
+                    st.rerun()
+
+                except requests.RequestException:
+
+                    st.error(
+                        "Failed to update follow-up."
+                    )
+
+        with col2:
+
+            if st.button(
+                "Mark Failed",
+                key=f"failed_{call_id}"
+            ):
+
+                try:
+
+                    response = requests.put(
+                        f"{API_URL}/followups/{call_id}",
+                        params={
+                            "status": "FAILED",
+                            "increment_attempt": True
+                        },
+                        timeout=5
+                    )
+
+                    response.raise_for_status()
+
+                    st.warning(
+                        "Follow-up marked as failed."
+                    )
+
+                    st.rerun()
+
+                except requests.RequestException:
+
+                    st.error(
+                        "Failed to update follow-up."
+                    )
+
+        st.divider()
+
+else:
+
+    st.info("No pending follow-ups.")

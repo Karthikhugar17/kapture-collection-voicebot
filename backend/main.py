@@ -132,10 +132,13 @@ def update_ptp_record(
             UPDATE collection_calls
             SET ptp_amount = %s,
                 ptp_date = %s,
+                follow_up_status = 'PENDING',
+                follow_up_date = %s,
+                attempt_count = 0,
                 updated_at = CURRENT_TIMESTAMP
             WHERE call_id = %s
             """,
-            (amount, ptp_date, call_id)
+            (amount, ptp_date, ptp_date, call_id)
         )
 
         connection.commit()
@@ -1804,3 +1807,249 @@ def get_collection_analytics():
             status_code=500,
             detail="Failed to retrieve collection analytics."
         )
+
+@app.get("/followups")
+def get_followups():
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                cc.call_id,
+                cc.customer_id,
+                c.customer_name,
+                c.account_id,
+                c.loan_type,
+                cc.ptp_amount,
+                cc.ptp_date,
+                cc.follow_up_status,
+                cc.follow_up_date,
+                cc.attempt_count
+            FROM collection_calls cc
+            JOIN customers c
+                ON cc.customer_id = c.id
+            WHERE cc.follow_up_status = 'PENDING'
+            ORDER BY cc.follow_up_date ASC
+            """
+        )
+
+        followups = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "total_followups": len(followups),
+            "followups": followups
+        }
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve follow-ups: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve follow-ups."
+        )
+    
+@app.get("/followups/due")
+def get_due_followups():
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                cc.call_id,
+                cc.customer_id,
+                c.customer_name,
+                c.account_id,
+                c.loan_type,
+                cc.ptp_amount,
+                cc.ptp_date,
+                cc.follow_up_status,
+                cc.follow_up_date,
+                cc.attempt_count
+            FROM collection_calls cc
+            JOIN customers c
+                ON cc.customer_id = c.id
+            WHERE cc.follow_up_status = 'PENDING'
+              AND cc.follow_up_date <= CURDATE()
+            ORDER BY cc.follow_up_date ASC
+            """
+        )
+
+        followups = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "total_due": len(followups),
+            "followups": followups
+        }
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve due follow-ups: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve due follow-ups."
+        )
+    
+@app.put("/followups/{call_id}")
+def update_followup(
+    call_id: str,
+    status: str,
+    increment_attempt: bool = True
+):
+    allowed_statuses = {
+        "PENDING",
+        "COMPLETED",
+        "RESCHEDULED",
+        "FAILED"
+    }
+
+    status = status.upper()
+
+    if status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid follow-up status. "
+                "Allowed values: "
+                "PENDING, COMPLETED, RESCHEDULED, FAILED."
+            )
+        )
+
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                call_id,
+                follow_up_status,
+                attempt_count
+            FROM collection_calls
+            WHERE call_id = %s
+            """,
+            (call_id,)
+        )
+
+        followup = cursor.fetchone()
+
+        if followup is None:
+            cursor.close()
+            connection.close()
+
+            raise HTTPException(
+                status_code=404,
+                detail="Follow-up not found."
+            )
+
+        current_attempts = followup["attempt_count"] or 0
+
+        new_attempts = (
+            current_attempts + 1
+            if increment_attempt
+            else current_attempts
+        )
+
+        cursor.execute(
+            """
+            UPDATE collection_calls
+            SET
+                follow_up_status = %s,
+                attempt_count = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE call_id = %s
+            """,
+            (
+                status,
+                new_attempts,
+                call_id
+            )
+        )
+
+        connection.commit()
+
+        cursor.execute(
+            """
+            SELECT
+                call_id,
+                follow_up_status,
+                follow_up_date,
+                attempt_count,
+                updated_at
+            FROM collection_calls
+            WHERE call_id = %s
+            """,
+            (call_id,)
+        )
+
+        updated_followup = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "success": True,
+            "message": "Follow-up updated successfully.",
+            "followup": updated_followup
+        }
+
+    except Error as error:
+
+        if connection.is_connected():
+            connection.rollback()
+            connection.close()
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to update follow-up: {error}"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update follow-up."
+        )
+        
