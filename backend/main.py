@@ -1593,3 +1593,214 @@ def database_health_check():
             "status": "error",
             "message": str(error)
         }
+    
+@app.get("/calls")
+def get_collection_calls():
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                cc.call_id,
+                cc.customer_id,
+                c.customer_name,
+                c.account_id,
+                cc.verification_status,
+                cc.disposition,
+                cc.notes,
+                cc.ptp_amount,
+                cc.ptp_date,
+                cc.created_at,
+                cc.updated_at
+            FROM collection_calls cc
+            JOIN customers c
+                ON cc.customer_id = c.id
+            ORDER BY cc.created_at DESC
+            """
+        )
+
+        calls = cursor.fetchall()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "total_calls": len(calls),
+            "calls": calls
+        }
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve collection calls: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve collection calls."
+        )
+    
+@app.get("/calls/{call_id}")
+def get_collection_call(call_id: str):
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                cc.call_id,
+                cc.customer_id,
+                c.customer_name,
+                c.account_id,
+                c.loan_type,
+                c.overdue_amount,
+                c.days_past_due,
+                cc.verification_status,
+                cc.disposition,
+                cc.notes,
+                cc.ptp_amount,
+                cc.ptp_date,
+                cc.created_at,
+                cc.updated_at
+            FROM collection_calls cc
+            JOIN customers c
+                ON cc.customer_id = c.id
+            WHERE cc.call_id = %s
+            """,
+            (call_id,)
+        )
+
+        call = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        if call is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Collection call not found."
+            )
+
+        return call
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve call: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve collection call."
+        )
+
+@app.get("/analytics")
+def get_collection_analytics():
+    connection = get_db_connection()
+
+    if connection is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Database connection failed."
+        )
+
+    try:
+        cursor = connection.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total_calls,
+
+                SUM(
+                    CASE
+                        WHEN disposition = 'PTP_AGREED'
+                        THEN 1 ELSE 0
+                    END
+                ) AS ptp_agreed,
+
+                SUM(
+                    CASE
+                        WHEN disposition = 'ALREADY_PAID'
+                        THEN 1 ELSE 0
+                    END
+                ) AS already_paid,
+
+                SUM(
+                    CASE
+                        WHEN disposition = 'HARDSHIP_ESCALATED'
+                        THEN 1 ELSE 0
+                    END
+                ) AS hardship_escalated,
+
+                SUM(
+                    CASE
+                        WHEN disposition = 'NO_RESPONSE'
+                        THEN 1 ELSE 0
+                    END
+                ) AS no_response,
+
+                COALESCE(
+                    SUM(ptp_amount),
+                    0
+                ) AS total_ptp_amount
+
+            FROM collection_calls
+            """
+        )
+
+        analytics = cursor.fetchone()
+
+        cursor.close()
+        connection.close()
+
+        return {
+            "total_calls": analytics["total_calls"],
+            "ptp_agreed": analytics["ptp_agreed"],
+            "already_paid": analytics["already_paid"],
+            "hardship_escalated": analytics["hardship_escalated"],
+            "no_response": analytics["no_response"],
+            "total_ptp_amount": float(
+                analytics["total_ptp_amount"]
+            )
+        }
+
+    except Error as error:
+
+        print(
+            f"[DATABASE ERROR] "
+            f"Failed to retrieve analytics: {error}"
+        )
+
+        if connection.is_connected():
+            connection.close()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve collection analytics."
+        )
