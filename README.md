@@ -1,72 +1,188 @@
-# Kapture Finance – AI Voice Collection Agent
+# Kapture Finance – AI-Powered Voice Collection & Recovery Platform
 
-An AI-powered voice collection agent built for Kapture Finance to automate customer payment collection calls.
+An end-to-end AI-powered collection and recovery platform designed to automate customer payment collection workflows.
 
-The agent verifies the customer's identity, retrieves account information from MySQL, discusses overdue payments, captures payment commitments, and records the final call disposition.
+The system combines an AI voice agent, FastAPI backend, MySQL database, follow-up management, customer risk classification, and a Streamlit analytics dashboard.
 
-## Features
+The voice agent can verify customers, retrieve loan information, discuss overdue payments, capture Promise-to-Pay commitments, record call outcomes, and persist the complete collection workflow in MySQL.
+
+---
+
+# Architecture
+
+```text
+                         ┌──────────────────────┐
+                         │    Customer Call     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   Vapi AI Voice      │
+                         │       Agent          │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │   FastAPI Backend    │
+                         │                      │
+                         │  • Verification      │
+                         │  • Account Lookup    │
+                         │  • PTP Management    │
+                         │  • Dispositions      │
+                         │  • Follow-ups        │
+                         │  • Risk Analytics    │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │        MySQL         │
+                         │                      │
+                         │ • Customers          │
+                         │ • Collection Calls   │
+                         │ • PTP Follow-ups     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │ Streamlit Dashboard  │
+                         │                      │
+                         │ • Call Analytics     │
+                         │ • Follow-ups         │
+                         │ • Customer Portfolio │
+                         │ • Risk Analytics     │
+                         └──────────────────────┘
+```
+
+---
+
+# Features
+
+## AI Voice Collection Agent
 
 - AI-powered voice conversations using Vapi
 - Customer identity verification
-- MySQL-based customer and account retrieval
+- Customer account retrieval
 - Overdue payment information retrieval
-- Promise-to-Pay (PTP) capture
-- Payment commitment date and amount recording
-- Collection call disposition tracking
-- Persistent call records in MySQL
-- FastAPI webhook backend
-- Secure environment variable configuration
+- Payment discussion workflow
+- Promise-to-Pay capture
+- Payment commitment amount and date recording
+- Final collection disposition tracking
 
-## Technology Stack
+## Collection Management
 
-### Backend
+- Persistent collection call records
+- Call history retrieval
+- Individual call details
+- Collection disposition tracking
+- Promise-to-Pay tracking
+- Follow-up scheduling
+- Follow-up status management
+- Follow-up attempt tracking
+- Due follow-up detection
+
+## Customer Portfolio Management
+
+- Multi-customer support
+- Customer account portfolio
+- Overdue amount tracking
+- Days Past Due tracking
+- Customer risk classification
+
+Risk levels are automatically calculated based on Days Past Due:
+
+```text
+25+ Days Past Due → HIGH
+15–24 Days Past Due → MEDIUM
+0–14 Days Past Due → LOW
+```
+
+## Analytics Dashboard
+
+The Streamlit dashboard provides:
+
+- Total collection calls
+- PTP agreed count
+- Already paid count
+- Hardship cases
+- No response count
+- Total promised payment amount
+- Collection disposition chart
+- Collection call history
+- Individual call details
+- Follow-up management
+- Due follow-up tracking
+- Pending follow-up actions
+- Customer portfolio metrics
+- Total overdue amount
+- High-risk customer count
+- Customer risk distribution chart
+
+---
+
+# Technology Stack
+
+## Backend
 
 - Python
 - FastAPI
 - Uvicorn
 
-### AI Voice
+## AI Voice
 
 - Vapi
 
-### Database
+## Database
 
 - MySQL
 
-### Networking
+## Dashboard
+
+- Streamlit
+- Pandas
+
+## Networking
 
 - Cloudflare Tunnel
 
-### Development
+## Development
 
 - Git
 - GitHub
 
-## Vapi Tools
+---
 
-The voice agent uses custom tools connected to the FastAPI webhook.
+# Vapi Tools
 
-### 1. verify_customer
+The AI voice agent uses custom tools connected to the FastAPI backend.
 
-Verifies the customer's identity using the customer name and verification code.
+## 1. verify_customer
 
-### 2. get_account_details
+Verifies the customer's identity using customer information and a verification code.
+
+---
+
+## 2. get_account_details
 
 Retrieves authenticated customer account information including:
 
 - Loan type
 - Overdue amount
-- Days past due
+- Days Past Due
 
-### 3. log_promise_to_pay
+---
+
+## 3. log_promise_to_pay
 
 Records a customer's payment commitment including:
 
 - Payment amount
-- Promise-to-pay date
+- Promise-to-Pay date
 - PTP reference
+- Follow-up information
 
-### 4. mark_disposition
+---
+
+## 4. mark_disposition
 
 Records the final outcome of the collection call.
 
@@ -81,13 +197,92 @@ Supported dispositions include:
 - `NO_RESPONSE`
 - `AUTH_FAILED`
 
-## Database Design
+---
+
+# REST APIs
+
+## Collection Calls
+
+```text
+GET /calls
+```
+
+Retrieves collection call history.
+
+```text
+GET /calls/{call_id}
+```
+
+Retrieves detailed information for a specific collection call.
+
+---
+
+## Analytics
+
+```text
+GET /analytics
+```
+
+Returns collection analytics including:
+
+- Total calls
+- PTP agreed
+- Already paid
+- Hardship escalated
+- No response
+- Total PTP amount
+
+---
+
+## Follow-ups
+
+```text
+GET /followups
+```
+
+Retrieves pending follow-ups.
+
+```text
+GET /followups/due
+```
+
+Retrieves follow-ups that are currently due.
+
+```text
+PUT /followups/{call_id}
+```
+
+Updates follow-up status and optionally increments the attempt count.
+
+---
+
+## Customers
+
+```text
+GET /customers
+```
+
+Returns the customer portfolio including:
+
+- Customer information
+- Loan type
+- Overdue amount
+- Days Past Due
+- Risk level
+
+Customers are automatically ordered by Days Past Due.
+
+---
+
+# Database Design
 
 The project uses a MySQL database named:
 
-`kapture_finance`
+```text
+kapture_finance
+```
 
-### customers
+## customers
 
 Stores customer and loan information.
 
@@ -103,7 +298,9 @@ Important fields:
 - `phone`
 - `created_at`
 
-### collection_calls
+---
+
+## collection_calls
 
 Stores persistent collection call information.
 
@@ -117,103 +314,176 @@ Important fields:
 - `notes`
 - `ptp_amount`
 - `ptp_date`
+- `follow_up_status`
+- `follow_up_date`
+- `attempt_count`
 - `created_at`
 - `updated_at`
 
-## Call Flow
+---
 
-Customer
-→ Vapi AI Voice Agent
-→ FastAPI Webhook
-→ Customer Verification
-→ Account Details
-→ Payment Discussion
-→ Promise to Pay / Final Disposition
-→ MySQL
+# Collection Workflow
 
-## Data Flow
+```text
+Customer Call
+     ↓
+Vapi AI Voice Agent
+     ↓
+Customer Verification
+     ↓
+Account Information Retrieval
+     ↓
+Overdue Payment Discussion
+     ↓
+Payment Decision
+     │
+     ├── Promise to Pay
+     │       ↓
+     │   Follow-up Created
+     │
+     ├── Already Paid
+     │
+     ├── Hardship Escalation
+     │
+     └── Other Disposition
+     ↓
+Collection Outcome Stored
+     ↓
+MySQL
+     ↓
+Analytics Dashboard
+```
 
-1. Vapi initiates the voice conversation.
-2. The customer provides identity information.
-3. FastAPI verifies the customer using MySQL.
-4. Account and overdue payment details are retrieved.
-5. The agent discusses the outstanding payment.
-6. The customer's payment intent is recorded.
-7. The final call disposition is stored.
-8. The complete collection outcome is persisted in MySQL.
+---
 
-## Local Setup
+# Local Setup
 
-### 1. Clone the repository
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Karthikhugar17/kapture-collection-voicebot.git
 cd kapture-collection-voicebot
 ```
 
-### 2. Install dependencies
+---
+
+## 2. Install Backend Dependencies
 
 ```bash
 pip install -r backend/requirements.txt
 ```
 
-### 3. Configure environment variables
+---
 
-Create a `.env` file inside the `backend` directory and add the required API keys and database configuration.
+## 3. Configure Environment Variables
+
+Create a `.env` file inside the `backend` directory.
+
+Example structure:
+
+```text
+DB_HOST=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
+VAPI_WEBHOOK_SECRET=
+```
 
 Sensitive credentials should never be committed to GitHub.
 
-### 4. Start the FastAPI server
+---
+
+## 4. Start the FastAPI Backend
 
 ```bash
 cd backend
 uvicorn main:app --reload --port 8000
 ```
 
-### 5. Start the Cloudflare tunnel
+The backend will run at:
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
+## 5. Start the Streamlit Dashboard
+
+Open another terminal from the project root:
+
+```bash
+streamlit run dashboard/app.py
+```
+
+---
+
+## 6. Start the Cloudflare Tunnel
 
 ```bash
 cloudflared.exe tunnel --url http://localhost:8000
 ```
 
-Configure the generated HTTPS URL as the webhook URL in the Vapi tools.
+Configure the generated HTTPS URL as the webhook endpoint for the Vapi tools.
 
-## Tested Outcomes
+---
 
-The system has been successfully tested with real Vapi voice calls for:
+# Example Customer Portfolio
+
+| Customer     | Loan Type     | Overdue Amount | Days Past Due | Risk   |
+| ------------ | ------------- | -------------: | ------------: | ------ |
+| Priya Kumar  | Home Loan     |        ₹24,500 |            25 | HIGH   |
+| Arjun Reddy  | Auto Loan     |        ₹12,750 |            18 | MEDIUM |
+| Rahul Sharma | Personal Loan |         ₹8,499 |            12 | LOW    |
+| Sneha Patil  | Personal Loan |         ₹5,200 |             7 | LOW    |
+
+---
+
+# Tested Collection Outcomes
+
+The system has been tested with collection workflows including:
 
 - `PTP_AGREED`
 - `ALREADY_PAID`
 - `HARDSHIP_ESCALATED`
 - `NO_RESPONSE`
 
-The corresponding call outcomes are persisted in the MySQL `collection_calls` table.
+The collection outcome, Promise-to-Pay information, and follow-up data are persisted in MySQL.
 
-## Example
+---
 
-Demo customer:
+# Security
 
-- Customer: Rahul Sharma
-- Loan Type: Personal Loan
-- Overdue Amount: ₹8,499
-- Days Past Due: 12
+Sensitive configuration is managed using environment variables.
 
-Example Promise-to-Pay:
+The following files are excluded from Git:
 
-- Disposition: `PTP_AGREED`
-- Amount: ₹8,499
-- Promise Date: 2026-08-21
+```text
+.env
+__pycache__/
+*.pyc
+```
 
-## Security
+Database credentials, API keys, and webhook secrets should never be committed to the repository.
 
-Sensitive information such as API keys, database credentials, and webhook secrets are stored in environment variables.
+---
 
-The `.env` file and Python cache files are excluded from Git using `.gitignore`.
+# Project Outcome
 
-## Project Outcome
+This project demonstrates an end-to-end AI-powered collection workflow integrating:
 
-The project demonstrates an end-to-end AI voice collection workflow where Vapi handles the voice interaction, FastAPI handles business logic, and MySQL provides persistent storage for customer and collection data.
+- AI voice automation
+- REST API development
+- Business workflow management
+- Relational database persistence
+- Follow-up operations
+- Customer risk prioritization
+- Analytics and dashboard development
 
-## Author
+The project was designed to demonstrate how AI agents can automate business workflows while maintaining structured backend logic and persistent operational data.
 
-Karthik Hugar
+---
+
+# Author
+
+**Karthik Hugar**
