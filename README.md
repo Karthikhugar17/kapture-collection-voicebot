@@ -484,6 +484,38 @@ The project was designed to demonstrate how AI agents can automate business work
 
 ---
 
+## Dashboard Screenshots
+
+### Collection Dashboard
+
+The Collection Dashboard provides an overview of collection call activity and key recovery metrics. It displays the total number of calls, Promise-to-Pay agreements, already paid cases, hardship cases, collection summary, and disposition breakdown.
+
+![Collection Dashboard](docs/screenshots/collection-dashboard.png)
+
+---
+
+### Collection Call History and Details
+
+The Collection Call History provides a complete view of previously recorded collection calls. Users can select an individual call to view customer information, overdue amount, days past due, disposition, verification status, Promise-to-Pay details, and call notes.
+
+![Collection Call History](docs/screenshots/call-history-details.png)
+
+---
+
+### Follow-up Management
+
+The Follow-up Management section helps track collection follow-ups. It displays follow-ups due today, pending follow-ups, and customer portfolio information.
+
+![Follow-up Management](docs/screenshots/follow-up-management.png)
+
+---
+
+### Customer Portfolio and Risk Analytics
+
+The Customer Portfolio section provides an overview of customers and their overdue amounts. It includes total customers, total overdue amount, high-risk customers, risk distribution analytics, and detailed customer information.
+
+![Customer Portfolio and Risk Analytics](docs/screenshots/customer-risk-analytics.png)
+
 # Author
 
 **Karthik Hugar**
